@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 14 23:45:39 2019
+
+@author: jishnu
+"""
+
+'''
+Aperture Photometry
+'''
+
+
+#%%
+def Aperture_photometry(idx_image,idx_ps1,cleanSources):
+        #Apertures in the SExtractor configuration file
+    aperture_diameter = np.arange(4, 14)
+    
+    #For each aperture, we are going to compute the magniutde difference between the largest pixel aperture and that specific aperture for every source in cross-matched catalog
+    magDiff = np.ma.zeros((len(aperture_diameter), len(idx_image)))
+    for j in range(len(aperture_diameter)):
+        magDiff[j] = sigma_clip(
+                cleanSources['MAG_APER'][:,9][idx_image] - cleanSources['MAG_APER'][:,j][idx_image])
+    #Here, magDiff is a 2D array contaning the difference magnitudes for each source and aperture
+        
+    #Now, let's plot the magnitude differences 
+    plt.figure(figsize = (8,8))
+    plt.plot(aperture_diameter, magDiff, 'r.', markersize=5)
+    plt.xlabel('Aperture diameter (pixels)', fontsize=15)
+    plt.ylabel('Largest aperture mag - aperture mag', fontsize = 15)
+    plt.xticks(fontsize = 15)
+    plt.yticks(fontsize = 15)
+    plt.show()
+    
+    plt.figure(figsize=(8,8))
+    #Plotting instrumental magnitude for aperture sizes of 5.0, 6.0 and 7.0 pixels
+    plt.plot(
+            ps1_imCoords['gmag'][idx_ps1], 
+            cleanSources['MAG_APER'][:,2][idx_image] ,
+            'r.', label='5 pixel'
+            )
+    plt.plot(
+            ps1_imCoords['gmag'][idx_ps1], 
+            cleanSources['MAG_APER'][:,3][idx_image] ,
+            'g.', label='6 pixel'
+            )
+    plt.plot(
+            ps1_imCoords['gmag'][idx_ps1], 
+            cleanSources['MAG_APER'][:,4][idx_image] ,
+            'b.', label='7 pixel'
+            )
+    plt.ylim(-16, -7.5)
+    plt.xlabel('PS1 magnitude', fontsize=15)
+    plt.ylabel('Instrumental magnitude', fontsize=15)
+    plt.legend(fontsize=15)
+    plt.show()
+    
+    
+    zeroPoints = []
+    for i in range(len(aperture_diameter)):
+        #Array of differences between the catalog and instrumental magnitudes
+        offsets = ma.array(
+                ps1_imCoords['gmag'][idx_ps1] - cleanSources['MAG_APER'][:,i][idx_image])
+        #Compute sigma clipped statistics
+        zero_mean, zero_med, zero_std = sigma_clipped_stats(offsets)
+        zeroDict = {
+                'diameter': aperture_diameter[i], 
+                'zp_mean': zero_mean, 
+                'zp_median': zero_med, 
+                'zp_std': zero_std
+                }
+        zeroPoints.append(zeroDict)
+        print(zeroDict)
+
+#%%
+def cross_matching(ps1_imCoords,cleanSources):
+    
+    sourceCatCoords = SkyCoord(
+            ra=cleanSources['ALPHAWIN_J2000'], 
+            dec=cleanSources['DELTAWIN_J2000'], 
+            frame='icrs', unit='degree'
+            )
+    
+    ps1CatCoords    = SkyCoord(
+            ra=ps1_imCoords['RAJ2000'], 
+            dec=ps1_imCoords['DEJ2000'], 
+            frame='icrs', unit='degree'
+            )
+    
+    #Now cross match sources
+    
+    #Set the cross-match distance threshold to 0.6 arcsec, or just about one pixel
+    photoDistThresh = 10
+    idx_image, idx_ps1, d2d, d3d = ps1CatCoords.search_around_sky(
+            sourceCatCoords, 
+            photoDistThresh*u.arcsec)
+    #idx_image are indexes into sourceCatCoords for the matched sources, 
+    #while idx_ps1 are indexes into ps1CatCoords for the matched sources
+    
+    print('Found %d good cross-matches'%len(idx_image))
+    return idx_image,idx_ps1   
