@@ -110,21 +110,6 @@ iers.IERS_A_URL = 'http://maia.usno.navy.mil/ser7/finals2000A.all' #default
 #default server throws up, HTTPError :403, so we are using alternate mirror
 download_IERS_A()
 #astroplan.get_IERS_A_or_workaround()
-#%%
-
-#decorator to get timing info
-
-def timer(orig_func):
-    import time as t
-    
-    def wrapper(*args, **kwargs):
-        t1 = t.time()
-        result = orig_func(*args, **kwargs)
-        t2 = t.time() - t1
-        print('{} ran in: {} sec'.format(orig_func.__name__, t2))
-        return result
-
-    return wrapper
 
 #%%
 def get_img(self): #smart way #returns 2D array from fits file data
@@ -135,19 +120,6 @@ def get_img(self): #smart way #returns 2D array from fits file data
     hdul.close() #closing the file. GOTTA save RAM!
     return image
 
-#%%
-''' not very useful now
-    this is here for sentimental value'''
-def get_img_slow(self): #returns 2D array from fits file data
-    hdul = fits.open(self)
-    image = np.asarray(hdul[0].data).astype(float) #reads data section of 
-                                                   #fits into an array as float
-    #image = np.array(image) #converting image to an array
-    #usually fits data comes as a 3D array, of which we need only one layer.
-    y,x = image.shape[-2],image.shape[-1] #getting y and x axes
-    image = image.reshape(y,x) #converting 3D array to 2D
-    hdul.close() #closing the file. GOTTA save RAM!
-    return image
 
 #%%
 def get_img_dims(self): #returns an array and x,y shappe of image
@@ -158,12 +130,6 @@ def get_img_dims(self): #returns an array and x,y shappe of image
     return image,y,x
 
 
-#%%
-def progress(i):
-        print('''
-    	File:%s ---- %.2f%s '''%(i,
-                                      (files.index(i)/len(files)*100),
-                                      '%'))
 #%% 
 astrometry = '../Photometry/'+'autoastrometry.py'
 
@@ -181,10 +147,9 @@ def WCS_astrometry():
                   Check if file exists.'''%err)
             
 #%%
-#WCS_astrometry()
+WCS_astrometry()
 
 #%%
-@timer
 def imgshow(self): #display the image
     plt.figure(figsize=(8,8)) #size
     plt.style.use(astropy_mpl_style) #styling and gimmicks of astropy
@@ -547,15 +512,6 @@ def psf_catalogue(imageName):
     cat.to_csv('sources/'+imageName+'_source_cat.csv',sep='\t')
 
 #%%
-'''
-    WORK to do HERE!!!
-    this can be modularized, and broken. Current implementation has
-    repetetive blocks for the target and standard star.
-    If this can be made into a function, it can take the image name and
-    targets(V,C1,C2...) as arguments, at the same time record() function
-    can be modified to take arguements.
-
-'''
 
 def Corrected_Magnitude(imageName,zero_psfmed, zero_psfstd):
     cleanPSFSources = clean_sources(imageName)
@@ -733,20 +689,6 @@ formula; mag = K-2.5log(flux), K is zeropoint magnitude
 -------------------------------------------------------
 
 '''
-#%%
-'''
- Things to do
- 1.Copy WCS into all files #DONE!!!
-     (http://www.astropy.org/astropy-tutorials/FITS-header.html)
- 
- 2.write the tableinto file. -                          DONE!
- 3.loop through all the images. -                       DONE!
- 4.psf fitting using psfex                              DONE!
- 5.cross matching, ZP deviation for each file           DONE!
- 6.read mag from all the files, apply zp correction     DONE!
- 7.write to lightcurve file as BJD,Mag & mag error      DONE!
- 8.perform differential photometry on the frames        Yet to do.
-'''
 
 #%%
 def get_info(imageName):
@@ -779,9 +721,7 @@ def main():
     #clean slate boi!
     #astrometry(hdul)
     for i in files:
-        progress(i)
                 #life is a progress bar, from dust to dust....
-        
         source_detection(i)
         #zzz.sleep(2)
         #detected_sources_plot(i)
@@ -810,7 +750,6 @@ def LC_plot():
     plt.scatter(bjd,[zero_psfmed+i+.5 for i in data['EC instmagC1']],
                 label='inst mag C1')
     plt.legend()
-    #plt.ylim(11,max(magV)+0.01)
     plt.gca().invert_yaxis()
     plt.savefig('LC.png',dpi=150)
     plt.show()
@@ -818,7 +757,6 @@ def LC_plot():
     
     plt.figure(figsize=(10,6))
     plt.scatter(bjd,data['Diff mag V'],label='Differential Mag')
-    #plt.ylim(-0.5,0.5)
     plt.legend()
     plt.savefig('LC_Diff_mag.png',dpi=150)
     plt.show()
