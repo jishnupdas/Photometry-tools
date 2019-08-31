@@ -1,4 +1,0 @@
-./image_reduction_files/reduced/aC0_20181013-190734-760.wcs.fits.proc.cr.fits
-./image_reduction_files/reduced/aC0_20181013-183430-709.wcs.fits.proc.cr.fits
-./image_reduction_files/reduced/aC0_20181013-201128-360.wcs.fits.proc.cr.fits
-./image_reduction_files/reduced/aC0_20181013-174714-557.wcs.fits.proc.cr.fits
