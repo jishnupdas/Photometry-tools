@@ -55,7 +55,7 @@ DEC = ['dec1,dec2,dec3...'']
 
 #%%
 def object(idx):
-    
+
     coordinates = coord.SkyCoord([RA[idx]],[DEC[idx]],
                             unit = (u.hourangle,u.deg),frame = 'icrs'
                             )
@@ -113,24 +113,20 @@ download_IERS_A()
 
 #%%
 def get_img(self): #smart way #returns 2D array from fits file data
-    hdul = fits.open(self)
-    image = np.asarray(hdul[0].data)
-    #image = np.array(image).astype(np.float16)
-    #reads data section of fits into an array as float
-    hdul.close() #closing the file. GOTTA save RAM!
+    with fits.open(self) as hdul:
+        image = np.asarray(hdul[0].data)
+
     return image
 
 
 #%%
 def get_img_dims(self): #returns an array and x,y shappe of image
-    hdul = fits.open(self)
-    image = np.asarray(hdul[0].data)
-    y,x = image.shape[-2],image.shape[-1] #getting y and x axes
-    hdul.close() #closing the file. GOTTA save RAM!
+    with fits.getdata(self) as image:
+        y,x = image.shape[-2],image.shape[-1] #getting y and x axes
     return image,y,x
 
 
-#%% 
+#%%
 astrometry = '../Photometry/'+'autoastrometry.py'
 
 def WCS_astrometry():
@@ -145,18 +141,18 @@ def WCS_astrometry():
         except subprocess.CalledProcessError as err:
             print('''Could not run autoastrometry with error %s.
                   Check if file exists.'''%err)
-            
+
 #%%
 WCS_astrometry()
 
 #%%
 def imgshow(self): #display the image
     plt.figure(figsize=(8,8)) #size
-    plt.style.use(astropy_mpl_style) #styling and gimmicks of astropy
+    plt.style.use(astropy_mpl_style) #styling template of astropy
     plt.imshow(self,vmin=np.median(self)-1*np.std(self),
                vmax=np.median(self)+10*np.std(self),cmap='gray')
     #use this for contrast stretching
-    
+
     plt.colorbar() #a bar showing the scale of the image
     plt.show()
     plt.close() #clean up after yourself!!
@@ -166,7 +162,7 @@ def astrometry(hdul): #single use
     global raImage,decImage,W,Image
     #Image = get_img_slow(hdul)
     Image = hdul[0].data
-    
+
     obs_target = coord.SkyCoord(hdul[0].header['RA'],hdul[0].header['DEC'],
                                 unit = (u.hourangle,u.deg),frame = 'icrs'
                                 )
@@ -186,7 +182,7 @@ def Query(raImage, decImage,W):    #single use
     boxsize = 30 # arcminutes
     #Magnitude cut-offs of sources to be cross-matched against
     maxmag = 15.9
-    
+
     #Vizier.VIZIER_SERVER = 'vizier.iucaa.ernet.in'
     Vizier.VIZIER_SERVER ='vizier.u-strasbg.fr'
     catNum = 'II/349'#This is the catalog number of PS1 in Vizier
@@ -198,7 +194,7 @@ def Query(raImage, decImage,W):    #single use
           %(catNum, raImage, decImage, boxsize))
 
     try:
-        #You can set the filters for the individual columns 
+        #You can set the filters for the individual columns
         #(magnitude range, number of detections) inside the Vizier query
         v = Vizier(columns=['*'],
                    column_filters={"gmag":"<%.2f"%maxmag,
@@ -216,11 +212,11 @@ def Query(raImage, decImage,W):    #single use
         global ps1_imCoords
         #Convert the world coordinates of these stars to image coordinates
         ps1_imCoords = W.all_world2pix(Q[0]['RAJ2000'], Q[0]['DEJ2000'], 1)
-        
+
         #Another round of filtering where we reject sources close to the edges
-        good_cat_stars = Q[0][np.where((ps1_imCoords[0] > 100) & 
-                          (ps1_imCoords[0] < 1900) & 
-                          (ps1_imCoords[1] > 100) & 
+        good_cat_stars = Q[0][np.where((ps1_imCoords[0] > 100) &
+                          (ps1_imCoords[0] < 1900) &
+                          (ps1_imCoords[1] > 100) &
                           (ps1_imCoords[1] < 3900))]
         print(good_cat_stars)
         #taking only good catalogue stars
@@ -228,11 +224,11 @@ def Query(raImage, decImage,W):    #single use
                                        good_cat_stars['DEJ2000'], 1)
         return Q[0],ps1_imCoords,good_cat_stars
         #plot_sources(Image,ps1_imCoords)
-        
+
     except:
         print('cannnot reach the Vizier database. check your internet!')
         return 0.0,0.0,0.0
-        
+
 
 #%%
 
@@ -253,17 +249,17 @@ try:
                        overwrite=True)
 except:
     print('check the query results!!')
-    
+
 #%%
-''' 
-    this gives the coords of sources in the 
+'''
+    this gives the coords of sources in the
     reference catalogue,
-    this will be used while cross matching sources, and 
+    this will be used while cross matching sources, and
     computing ZP for the frames
 '''
 ps1CatCoords = SkyCoord(
-        ra=ref_imCoords['RAJ2000'], 
-        dec=ref_imCoords['DEJ2000'], 
+        ra=ref_imCoords['RAJ2000'],
+        dec=ref_imCoords['DEJ2000'],
         frame='icrs', unit='degree'
         )
 
@@ -283,51 +279,51 @@ def plot_sources(data,ps1_imCoords):
             ]
     for c in circles:
         ax.add_artist(c)
-        
+
     plt.show()
     plt.close()
 
 
 #%%
 def source_detection(imageName):
-    
+
     c = os.getcwd()
-    
+
     os.chdir('../reduced/')
     f = os.getcwd()
     os.chdir('../Photometry/config')
     os.system('cp photomCat.sex '+f)
     os.system('cp photomCat.param '+f)
     os.chdir(f)
-    
-    
+
+
     configFile = 'photomCat.sex'
     paramName  = 'photomCat.param'
-    
+
     open(imageName+'.cat','w+')
     catalogName = imageName+'.cat'
-    
+
     try:
         subprocess.run(
-                ['sextractor', '-c', configFile, 
+                ['sextractor', '-c', configFile,
                  imageName,
-                 '-CATALOG_NAME', catalogName, 
+                 '-CATALOG_NAME', catalogName,
                  '-PARAMETERS_NAME', paramName],
                  check=True
                  )
     except subprocess.CalledProcessError as err:
         print('Could not run sextractor with exit error %s'%err)
-    
-    os.chdir(c)  
+
+    os.chdir(c)
 
 #%%
 def get_table_from_ldac(filename, frame=1):
     """
-    Load an astropy table from a fits_ldac by frame (Since the ldac format has 
-    column info for odd tables, giving it twce as many tables as a regular 
+    Load an astropy table from a fits_ldac by frame (Since the ldac format has
+    column info for odd tables, giving it twce as many tables as a regular
     fits BinTableHDU,match the frame of a table to its corresponding frame in
     the ldac file).
-    
+
     Parameters
     ----------
     filename: str
@@ -349,8 +345,8 @@ def LDAC_cat(catalogName,filename):
     #print(sourceTable)
     '''
     ascii.write(
-            sourceTable[0], 
-            filename+'_extracted_sources.csv', 
+            sourceTable[0],
+            filename+'_extracted_sources.csv',
             format='csv',
             overwrite=True)
     '''
@@ -364,8 +360,8 @@ def clean_sources(imageName):
     sourceTable = get_table_from_ldac(catalogName)
     cleanSources = sourceTable[
             (sourceTable['FLAGS']==0)          &
-            (sourceTable['FWHM_WORLD'] < 2   ) & 
-            (sourceTable['XWIN_IMAGE'] < 1800) & 
+            (sourceTable['FWHM_WORLD'] < 2   ) &
+            (sourceTable['XWIN_IMAGE'] < 1800) &
             (sourceTable['XWIN_IMAGE'] > 200 ) &
             (sourceTable['YWIN_IMAGE'] < 3800) &
             (sourceTable['YWIN_IMAGE'] > 200 ) &
@@ -387,29 +383,29 @@ def detected_sources_plot(imageName):
                vmax=np.median(data)+8*np.std(data),cmap='gray')
     #plotting circles on top of all detected sources
     circles = [plt.Circle(
-            (source['XWIN_IMAGE'], 
-             source['YWIN_IMAGE']), 
+            (source['XWIN_IMAGE'],
+             source['YWIN_IMAGE']),
              radius = 30, edgecolor='r',
              facecolor='None') for source in cleanSources]
     for c in circles:
         ax.add_artist(c)
-    
+
     plt.savefig('frames/'+imageName+'field.png',dpi=150)
     #plt.show()
     plt.close()
-    
 
-#%%    
+
+#%%
 def psf_photometry(imageName):
-    
+
     psfConfigFile = 'psfex_conf.psfex'
     catalogName = imageName+'.cat'
-    
+
     try:
         subprocess.run(
                 ['psfex',
                  '-c', psfConfigFile,
-                 catalogName], 
+                 catalogName],
                  check=True
                  )
     except subprocess.CalledProcessError as err:
@@ -417,7 +413,7 @@ def psf_photometry(imageName):
 
 #%%
 def Curve_of_growth(imageName):
-    plt.style.use(astropy_mpl_style)    
+    plt.style.use(astropy_mpl_style)
     psfModelHDU = fits.open('moffat_'+imageName+'.fits')[0]
     psfModelData = psfModelHDU.data
     plt.figure(figsize=(6,6))
@@ -427,20 +423,20 @@ def Curve_of_growth(imageName):
     plt.savefig('PSF/'+imageName+'_psf.png',dpi=150)
     #plt.show()
     plt.close()
-    
+
 
     psfImageCenter = [(psfModelData.shape[0]-1)/2, (psfModelData.shape[1]-1)/2]
     y, x = np.indices(psfModelData.shape)
     r = np.sqrt((x-psfImageCenter[0])**2 + (y-psfImageCenter[1])**2)
     r = r.astype(np.int)
-    
+
     tbin = np.bincount(r.ravel(), psfModelData.ravel())
     nr = np.bincount(r.ravel())
     radialprofile = tbin/nr
-    
+
     plt.figure(figsize=(6,6))
     plt.title(imageName)
-    plt.style.use(astropy_mpl_style)    
+    plt.style.use(astropy_mpl_style)
     plt.plot(range(len(radialprofile)), radialprofile, 'k.', markersize=15)
     plt.xlabel('Radial distance (pixels)', fontsize=15)
     plt.ylabel('PSF Amplitude', fontsize=15)
@@ -453,25 +449,25 @@ def Curve_of_growth(imageName):
 #%%
 def psf_fitting(imageName):
     c = os.getcwd()
-    
+
     os.chdir('../reduced/')
     f = os.getcwd()
     os.chdir('../Photometry/config')
     os.system('cp photomCat.sex '+f)
     os.system('cp photomPSF.param '+f)
     os.chdir(f)
-    
+
     configFile = 'photomCat.sex'
     psfName = imageName + '.psf'
     open(imageName+'psf.cat','w+')
     psfcatalogName = imageName+'.psf.cat'
-    psfparamName = 'photomPSF.param' 
-    
+    psfparamName = 'photomPSF.param'
+
     '''
     This is a new set of parameters to be obtained from SExtractor,
     including PSF-fit magnitudes
     '''
-    
+
     try:
         '''
         We are supplying SExtactor with the PSF model with the
@@ -487,10 +483,10 @@ def psf_fitting(imageName):
                  psfparamName],
                  check=True
                  )
-    
+
     except subprocess.CalledProcessError as err:
         print('Could not run sextractor with exit error %s'%err)
-    
+
     os.chdir(c)
 
 #%%
@@ -523,20 +519,20 @@ def Corrected_Magnitude(imageName,zero_psfmed, zero_psfstd):
     idx_Source, idx_cleanpsf_Source, d2d, d3d = sourceCatCoords.search_around_sky(
             Source, photoDistThresh*u.arcsec)
     #print('Found the source at index %d'%idx_cleanpsf_Source[0])
-    
+
     try:
         psfinstmag = cleanPSFSources[idx_cleanpsf_Source]['MAG_POINTSOURCE'][0]
         psfinstmagerr = cleanPSFSources[idx_cleanpsf_Source]['MAGERR_POINTSOURCE'][0]
-        
+
         psfmag = zero_psfmed + psfinstmag
         psfmagerr = np.sqrt(psfinstmagerr**2 + zero_psfstd**2)
-        
+
         instMagV.append(psfinstmag)
         instMagVerr.append(psfinstmagerr)
         magV.append(psfmag)
-        magVerr.append(psfmagerr)            
+        magVerr.append(psfmagerr)
         source_index.append(idx_cleanpsf_Source)
-                
+
         print('''
               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
               | PSF-fit magnitude of SOURCE is %.2f +/- %.2f |
@@ -551,26 +547,26 @@ def Corrected_Magnitude(imageName,zero_psfmed, zero_psfstd):
         magVerr.append(0)
         source_index.append(-1)
         print('Trouble finding the source!')
-        
-#%%    
+
+#%%
 #   This bit is to find psf mag and W mag of comparison
     idx_Source, idx_cleanpsf_Source, d2d, d3d = sourceCatCoords.search_around_sky(
         C1, photoDistThresh*u.arcsec)
     #print('Found the source at index %d'%idx_cleanpsf_Source[0])
-    
+
     try:
         psfinstmag = cleanPSFSources[idx_cleanpsf_Source]['MAG_POINTSOURCE'][0]
         psfinstmagerr = cleanPSFSources[idx_cleanpsf_Source]['MAGERR_POINTSOURCE'][0]
-        
+
         psfmag = zero_psfmed + psfinstmag
         psfmagerr = np.sqrt(psfinstmagerr**2 + zero_psfstd**2)
-        
+
         instMagC1.append(psfinstmag)
         instMagC1err.append(psfinstmagerr)
         magC1.append(psfmag)
-        magC1err.append(psfmagerr)            
+        magC1err.append(psfmagerr)
         C1_index.append(idx_cleanpsf_Source)
-        
+
     except:
         instMagC1.append(0)
         instMagC1err.append(0)
@@ -582,35 +578,35 @@ def Corrected_Magnitude(imageName,zero_psfmed, zero_psfstd):
 #%%
 def psf_cross_matching(imageName):
     cleanPSFSources = clean_sources(imageName)
-    
+
     psfCatCoords = SkyCoord(
-            ra=cleanPSFSources['ALPHAWIN_J2000'], 
-            dec=cleanPSFSources['DELTAWIN_J2000'], 
+            ra=cleanPSFSources['ALPHAWIN_J2000'],
+            dec=cleanPSFSources['DELTAWIN_J2000'],
             frame='icrs', unit='degree'
             )
     '''
      Now cross match sources
-     cross-match distance threshold was set in the beginning, 
-     update to your liking 
+     cross-match distance threshold was set in the beginning,
+     update to your liking
      Currently set to a generous value, reduce for crowded fields
      or precise pointing and good seeing. (unrealistic at VBO)
     '''
-    
+
     idx_psfimage, idx_psfps1, d2d, d3d = ps1CatCoords.search_around_sky(
             psfCatCoords, photoDistThresh*u.arcsec
             )
-    
+
     print('Found %d good cross-matches'%len(idx_psfimage))
-    
+
     psfoffsets = ma.array(
-            ref_imCoords['gmag'][idx_psfps1] - 
+            ref_imCoords['gmag'][idx_psfps1] -
             cleanPSFSources['MAG_POINTSOURCE'][idx_psfimage])
     #Compute sigma clipped statistics
     global zero_psfmean, zero_psfmed, zero_psfstd
     zero_psfmean, zero_psfmed, zero_psfstd = sigma_clipped_stats(psfoffsets)
-    
+
     Cross_match_plot(cleanPSFSources,imageName,idx_psfps1,idx_psfimage)
-    
+
     Corrected_Magnitude(imageName,zero_psfmed, zero_psfstd)
     #return zero_psfmean, zero_psfmed, zero_psfstd
 
@@ -620,7 +616,7 @@ def Cross_match_plot(cleanPSFSources,imageName,idx_psfps1,idx_psfimage):
     plt.title(imageName)
     plt.style.use(astropy_mpl_style)
     plt.plot(
-            ref_imCoords['gmag'][idx_psfps1], 
+            ref_imCoords['gmag'][idx_psfps1],
             cleanPSFSources['MAG_POINTSOURCE'][idx_psfimage],
             'r.', markersize=14,
             )
@@ -671,11 +667,11 @@ def record(Source_name):
     #print(data)
     data.dropna()
     data.to_csv('LC_'+str(Source_name)+'_'+obsdate[0]+'_.csv',sep=',')
-    
+
 #%%
 '''extinction m(X)  =  m0   +  k*X
-   corrected m0  =  m(X)  -  k*X 
-   
+   corrected m0  =  m(X)  -  k*X
+
    passband         k
  ----------------------
       U            0.6
@@ -683,7 +679,7 @@ def record(Source_name):
       V            0.2
       R            0.1
       I            0.08
-      
+
 -------------------------------------------------------
 formula; mag = K-2.5log(flux), K is zeropoint magnitude
 -------------------------------------------------------
@@ -703,7 +699,7 @@ def get_info(imageName):
     obsdate.append(hdul[0].header['DATE-OBS'])
     t = Time(hdul[0].header['DATE-OBS'], format='fits', scale='utc')
     jd.append(t.jd) #we only use JD.
-    
+
     obs_target = coord.SkyCoord(hdul[0].header['RA'],hdul[0].header['DEC'],
                                 unit = (u.hourangle,u.deg),frame = 'icrs'
                                 )
@@ -712,11 +708,11 @@ def get_info(imageName):
     ltt_bary = times.light_travel_time(obs_target)
     time_barycentre = times.tdb + ltt_bary
     bjd.append(time_barycentre.value)
-    
+
     hdul.close()
-    
+
 #%%
-def main(): 
+def main():
     os.chdir('../reduced/') #cd into the directory where reduced files reside.
     #clean slate boi!
     #astrometry(hdul)
@@ -731,7 +727,7 @@ def main():
         psf_catalogue(i)
         psf_cross_matching(i)
         get_info(i)
-        
+
 #%%
 def imageshow(self): #display the image
     plt.figure(figsize=(8,8)) #size
@@ -754,7 +750,7 @@ def LC_plot():
     plt.savefig('LC.png',dpi=150)
     plt.show()
     plt.close()
-    
+
     plt.figure(figsize=(10,6))
     plt.scatter(bjd,data['Diff mag V'],label='Differential Mag')
     plt.legend()
