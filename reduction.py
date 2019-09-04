@@ -51,11 +51,11 @@ class fread():
             files.append(fitsName)
 
     def biasfiles(): #find all bias files and add to a list
-        for Bfile in glob.glob('*bia*.fits') or glob.glob('*Bia*.fits'):
+        for Bfile in glob.glob('*Bias*') or glob.glob('*bia*'):
             bfiles.append(Bfile)
 
     def flatfiles(): #find all flat files and add to a list
-        for Ffile in glob.glob('*sflat_V*.fits') or glob.glob('*Flat*.fits'):
+        for Ffile in glob.glob('*flat*.fits') or glob.glob('*Flat*.fits'):
             ffiles.append(Ffile)
 
 
