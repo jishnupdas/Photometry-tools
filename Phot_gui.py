@@ -33,7 +33,8 @@ class Phot:
     '''
 
     def __init__(self,file,image=None,header=None,clck=None,src_coords=None,
-                 cutout=None,obj_num=None,var=None,check=None,comp=None):
+                 aperture=None,annulus=None,cutout=None,obj_num=None,
+                 var=None,check=None,comp=None):
         '''opens the image and inits variables
 
         Parameters:
@@ -53,6 +54,8 @@ class Phot:
         self.var        = var
         self.check      = check
         self.comp       = comp
+        self.aperture   = aperture
+        self.annulus    = annulus
         self.cutout     = 100
         self.obj_num    = 3
 
@@ -74,12 +77,17 @@ class Phot:
         if len(self.clck) >= self.obj_num:
             plt.close()
 
+    def on_key(self,event):
+        'close plot when a key is pressed'
+        plt.close()
+
 
     def img_click(self):
         '''plot the image & connect the click event to the plot'''
 
         fig, ax = plt.subplots(figsize=(10,10))
         plt.style.use(astropy_mpl_style) #styling template of astropy
+        plt.title('Right click on 3 sources')
         ax.imshow(self.image,vmin=np.median(self.image)-1*np.std(self.image),
            vmax=np.median(self.image)+5*np.std(self.image),cmap='gray')
         plt.gca().invert_yaxis()
@@ -116,17 +124,19 @@ class Phot:
         return section
 
     def plot_src(self,coords):
+
+        positions      = coords
+        radius         = self.find_optimal_aperture()
+        self.aperture  = photutils.CircularAperture(positions, r=radius)
+        self.annulus   = photutils.CircularAnnulus(positions, r_in=radius+8,
+                                                              r_out=radius+16)
         fig = plt.figure(figsize=(10,10))
         plt.style.use(astropy_mpl_style)
-        ax = fig.gca()
+        cid = fig.canvas.mpl_connect('key_press_event', self.on_key)
         self.imgshow(self.image)
-        circles = [plt.Circle(
-                (coords[i][0], coords[i][1]),
-                radius = 30,edgecolor='r',
-                facecolor='None') for i in range(len(coords))
-                ]
-        for c in circles:
-            ax.add_artist(c)
+        self.aperture.plot(color='white', lw=0.5)
+        self.annulus.plot(color='red', lw=0.5)
+        plt.xlabel('Press any key to close.')
 
         plt.show()
 
@@ -158,29 +168,31 @@ class Phot:
     def apphot(self):
         '''perform aperture photometry on the selected sources'''
 
-        positions = self.src_coords
-        radius    = self.find_optimal_aperture()
-        aperture  = photutils.CircularAperture(positions, r=radius)
-        annulus   = photutils.CircularAnnulus(positions, r_in=radius+6,
+        positions      = self.src_coords
+        radius         = self.find_optimal_aperture()
+        self.aperture  = photutils.CircularAperture(positions, r=radius)
+        self.annulus   = photutils.CircularAnnulus(positions, r_in=radius+6,
                                                          r_out=radius+8)
+
         tbl       = photutils.aperture_photometry(self.image,
-                                                  [aperture,annulus],
+                                                  [self.aperture,self.annulus],
                                                   error=self.error)
 
-        bg_mean   = tbl['aperture_sum_1'] / annulus.area
-        bg_flx    = bg_mean * aperture.area
+        bg_mean   = tbl['aperture_sum_1'] / self.annulus.area
+        bg_flx    = bg_mean * self.aperture.area
         final_flx = tbl['aperture_sum_0'] - bg_flx
 
         tbl['res_flx'] = final_flx
         tbl['flx_err'] = tbl['aperture_sum_err_0']+tbl['aperture_sum_err_1']
+        tbl['SNR']     = tbl['res_flx']/bg_flx
 
         for col in tbl.colnames:
             tbl[col].info.format = '%.6g'
             # for consistent table output
 
-        self.var  = (tbl['res_flx'][0],tbl['flx_err'][0])
-        self.comp = (tbl['res_flx'][1],tbl['flx_err'][1])
-        self.check= (tbl['res_flx'][2],tbl['flx_err'][2])
+        self.var  = (tbl['res_flx'][0],tbl['flx_err'][0],tbl['SNR'][0])
+        self.comp = (tbl['res_flx'][1],tbl['flx_err'][1],tbl['SNR'][1])
+        self.check= (tbl['res_flx'][2],tbl['flx_err'][2],tbl['SNR'][2])
 
         return tbl
 
@@ -226,7 +238,7 @@ phot_table = phot.apphot()
 
 #%%
 
-print('UT,AIRMASS,JD,v_flx,err_v,c1,err_c1,c2,err_c2,flx,err')
+print('File,UT,AIRMASS,JD,v_flx,err_v,c1,err_c1,c2,err_c2,SNR,flx,err')
 
 for f in files:
     phot       = Phot(f)
@@ -238,131 +250,9 @@ for f in files:
     ut,am,jd   = phot.get_info()
     v,c1,c2    = phot.var[0],phot.comp[0],phot.check[0]
     ev,ec1,ec2 = phot.var[1],phot.comp[1],phot.check[1]
+    snr        = phot.var[2] #SNR of the source
 
-    flx,err    = v-c1,ev+ec1
-    print('%s,%.2f,%.6f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f'%(
-            str(ut),am,jd,v,ev,c1,ec1,c2,ec2,flx,err))
+    flx,err    = c1-v,ev+ec1
+    print('%s,%s,%.2f,%.6f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.2f,%.3f,%.3f'%(
+            f,str(ut),am,jd,v,ev,c1,ec1,c2,ec2,snr,flx,err))
 
-#%%
-#positions = [(964, 1090), (408, 726), (835, 328)]
-#aperture = photutils.CircularAperture(positions, r=7.)
-#data = phot.image
-#error = 0.1 * data
-#
-#phot_table = photutils.aperture_photometry(data, aperture, error=error)
-#for col in phot_table.colnames:
-#    phot_table[col].info.format = '%.4g'  # for consistent table output
-#print(phot_table)
-##%%
-#def get_img(self):
-#    '''returns the image as an np array from fits file'''
-#    with fits.open(self) as hdul:
-#        image = np.asarray(hdul[0].data)
-#    return image
-#
-#def single_click(event): ##to read the event of a click
-#    '''records click events from the plot'''
-#    global xclickarr, yclickarr,n
-#    if event.button == 3: ##for right click
-#        clickarr.append((event.xdata,event.ydata))
-#        #append array with value of coordinates of click
-#        print("clicked (x,y) : (%.2f,%.2f"%(event.xdata,event.ydata))
-#    if len(clickarr) >= n:
-#        plt.close()
-#
-##%%
-#def imgshow(self): #display the image
-#    plt.figure(figsize=(8,8)) #size
-#    plt.style.use(astropy_mpl_style) #styling template of astropy
-#    plt.imshow(self,vmin=np.median(self)-1*np.std(self),
-#               vmax=np.median(self)+10*np.std(self),cmap='gray')
-#    plt.gca().invert_yaxis()
-#    #use this for contrast stretching
-#
-##    plt.colorbar() #a bar showing the scale of the image
-##    plt.show()
-#
-##%%
-#def img_click(self): #display the image
-#    fig, ax = plt.subplots(figsize=(10,10))
-#    plt.style.use(astropy_mpl_style) #styling template of astropy
-#    ax.imshow(self,vmin=np.median(self)-1*np.std(self),
-#               vmax=np.median(self)+5*np.std(self),cmap='gray')
-#    #use this for contrast stretching
-#    cid = fig.canvas.mpl_connect('button_press_event', single_click)
-#    plt.show()
-#
-#def dist(p1,p2):
-#    x1,y1 = int(p1[0]),int(p1[1])
-#    x2,y2 = int(p1[0]),int(p1[1])
-#    dist = np.sqrt(x1-x2)**2 +(y1-y2)**2
-#    return dist
-##%%
-#def get_center(image,coord,cutout):
-#    x,y  = int(coord[0]),int(coord[1])
-#
-#    c = ndimage.maximum_position(image[y-cutout:y+cutout,x-cutout:x+cutout])
-#    Y,X = y,x
-#    Y += cutout-c[0]
-#    X += cutout-c[1]
-#    y,x = int(Y),int(X)
-#    CRD = (x,y)
-#
-#    return CRD,(X,Y),c
-#
-##%%
-#def get_c(image,coord,cut):
-#    x,y  = int(coord[0]),int(coord[1])
-#    #print(y,x)
-#    c = np.where(image[y-cut:y+cut,
-#                       x-cut:x+cut] == np.amax(image[y-cut:y+cut,x-cut:x+cut]))
-#
-#    Y,X = y,x
-#
-#    Y += 50-c[0]
-#    X += 50-c[1]
-#
-#    return c,(X,Y)
-#
-#
-#
-#def plot_src(self,coords):
-#    fig = plt.figure(figsize=(10,10))
-#    plt.style.use(astropy_mpl_style)
-#    ax = fig.gca()
-#    #plt.imshow(data, vmin=median-3*sigma, vmax=median+3*sigma,cmap='gray')
-#    plt.imshow(self,vmin=np.median(self)-1*np.std(self),
-#               vmax=np.median(self)+5*np.std(self),cmap='gray')
-#    circles = [plt.Circle(
-#            (coords[i][0], coords[i][1]),
-#            radius = 30,edgecolor='r',
-#            facecolor='None') for i in range(len(coords))
-#            ]
-#    for c in circles:
-#        ax.add_artist(c)
-#
-#    plt.show()
-#
-##%%
-#def test_plot(image,coord,correc):
-#    imgshow(image)
-#    plt.plot(coord[0],coord[1],'ro')
-#    plt.plot(correc[0],correc[1],'go')
-##%%
-#clickarr,n = [],1
-#
-#img_click(get_img(files[0]))
-#
-#c_cord = []
-#
-#for c in clickarr:
-#    image = get_img(files[0])
-#    CRD,cent,cord = get_center(image,c,50)
-#    c_cord.append(cord)
-#
-#
-#print('clicked array',clickarr)
-#print('corrected coordinates',c_cord)
-#
-#plot_src(get_img(files[0]),clickarr)
-#plot_src(get_img(files[0]),c_cord)
