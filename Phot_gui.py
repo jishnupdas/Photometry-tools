@@ -18,9 +18,6 @@ import matplotlib.pyplot as plt
 from scipy import ndimage
 from astropy.io import fits
 from astropy.time import Time
-#from astroquery.vizier import Vizier
-#from astropy.coordinates import SkyCoord
-#from astropy.stats import sigma_clipped_stats
 from astropy.visualization import astropy_mpl_style
 from astropy import time, coordinates as coord, units as u
 
@@ -56,7 +53,7 @@ class Phot:
         self.comp       = comp
         self.aperture   = aperture
         self.annulus    = annulus
-        self.cutout     = 100
+        self.cutout     = 70
         self.obj_num    = 3
 
 
@@ -95,10 +92,10 @@ class Phot:
         plt.show()
 
 
-    def get_center(self,coord):
+    def get_center(self,coords):
         '''get the peak of the given cutout'''
 
-        x,y     = int(coord[0]),int(coord[1])
+        x,y     = int(coords[0]),int(coords[1])
 
         section = ndimage.gaussian_filter(
                                 self.image[y-self.cutout:y+self.cutout,
@@ -142,7 +139,7 @@ class Phot:
 
     def find_optimal_aperture(self):
         '''function to fin the optimal aperture'''
-        radii    = list(np.linspace(1,19,50))
+        radii    = list(np.linspace(1,15,50))
         flx      = []
         position = self.src_coords[0]
 
@@ -197,7 +194,7 @@ class Phot:
         return tbl
 
     def get_info(self):
-
+        '''get information from header'''
         ut=(self.header['UT'])
 #        ra=(self.header['RA'])
 #        dec=(self.header['DEC'])
@@ -208,7 +205,7 @@ class Phot:
         return ut,am,jd
 
 #%%
-os.chdir('/home/jishnu/Documents/data_red/200643/09/reduced/')
+os.chdir('../reduced/')
 
 files = glob.glob('*proc.fits')
 #%%
@@ -231,10 +228,10 @@ files = glob.glob('*proc.fits')
 #print(phot_table)
 #%%
 'some more testing'
-phot   = Phot(files[0])
-phot.src_coords = [(964, 1090), (408, 726), (835, 328)]
-
-phot_table = phot.apphot()
+#phot   = Phot(files[0])
+#phot.src_coords = [(964, 1090), (408, 726), (835, 328)]
+#
+#phot_table = phot.apphot()
 
 #%%
 
@@ -255,4 +252,3 @@ for f in files:
     flx,err    = c1-v,ev+ec1
     print('%s,%s,%.2f,%.6f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.2f,%.3f,%.3f'%(
             f,str(ut),am,jd,v,ev,c1,ec1,c2,ec2,snr,flx,err))
-
