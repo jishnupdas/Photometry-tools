@@ -24,10 +24,6 @@ from astropy.time import Time
 from astropy.visualization import astropy_mpl_style
 from astropy import time, coordinates as coord, units as u
 
-#%%
-os.chdir('/home/jishnu/Documents/data_red/200643/09/reduced/')
-
-files = glob.glob('*proc.fits')
 
 #%%
 class Phot:
@@ -74,7 +70,7 @@ class Phot:
         if event.button == 3: ##for right click
             self.clck.append((event.xdata,event.ydata))
             #append array with value of coordinates of click
-            print("clicked on (x,y) : (%.2f,%.2f)"%(event.xdata,event.ydata))
+            #print("clicked on (x,y) : (%.2f,%.2f)"%(event.xdata,event.ydata))
         if len(self.clck) >= self.obj_num:
             plt.close()
 
@@ -198,6 +194,11 @@ class Phot:
         jd=(t.jd)
 
         return ut,am,jd
+
+#%%
+os.chdir('/home/jishnu/Documents/data_red/200643/09/reduced/')
+
+files = glob.glob('*proc.fits')
 #%%
 'testing code'
 #phot   = Phot(files[0])
@@ -223,6 +224,24 @@ phot.src_coords = [(964, 1090), (408, 726), (835, 328)]
 
 phot_table = phot.apphot()
 
+#%%
+
+print('UT,AIRMASS,JD,v_flx,err_v,c1,err_c1,c2,err_c2,flx,err')
+
+for f in files:
+    phot       = Phot(f)
+    phot.img_click()
+    phot.src_coords = [phot.get_center(c)[0] for c in phot.clck]
+    phot.plot_src(phot.src_coords)
+    plt.close()
+    phot_table = phot.apphot()
+    ut,am,jd   = phot.get_info()
+    v,c1,c2    = phot.var[0],phot.comp[0],phot.check[0]
+    ev,ec1,ec2 = phot.var[1],phot.comp[1],phot.check[1]
+
+    flx,err    = v-c1,ev+ec1
+    print('%s,%.2f,%.6f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f'%(
+            str(ut),am,jd,v,ev,c1,ec1,c2,ec2,flx,err))
 
 #%%
 #positions = [(964, 1090), (408, 726), (835, 328)]
