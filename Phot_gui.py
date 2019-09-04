@@ -17,12 +17,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import ndimage
 from astropy.io import fits
-#from astropy.time import Time
+from astropy.time import Time
 #from astroquery.vizier import Vizier
 #from astropy.coordinates import SkyCoord
 #from astropy.stats import sigma_clipped_stats
 from astropy.visualization import astropy_mpl_style
-#from astropy import time, coordinates as coord, units as u
+from astropy import time, coordinates as coord, units as u
 
 #%%
 os.chdir('/home/jishnu/Documents/data_red/200643/09/reduced/')
@@ -57,7 +57,7 @@ class Phot:
         self.var        = var
         self.check      = check
         self.comp       = comp
-        self.cutout     = 50
+        self.cutout     = 100
         self.obj_num    = 3
 
 
@@ -86,6 +86,7 @@ class Phot:
         plt.style.use(astropy_mpl_style) #styling template of astropy
         ax.imshow(self.image,vmin=np.median(self.image)-1*np.std(self.image),
            vmax=np.median(self.image)+5*np.std(self.image),cmap='gray')
+        plt.gca().invert_yaxis()
         cid = fig.canvas.mpl_connect('button_press_event', self.single_click)
         plt.show()
 
@@ -93,9 +94,17 @@ class Phot:
     def get_center(self,coord):
         '''get the peak of the given cutout'''
 
-        x,y  = int(coord[0]),int(coord[1])
-        c = ndimage.maximum_position(self.image[y-self.cutout:y+self.cutout,
-                                                x-self.cutout:x+self.cutout])
+        x,y     = int(coord[0]),int(coord[1])
+
+        section = ndimage.gaussian_filter(
+                                self.image[y-self.cutout:y+self.cutout,
+                                           x-self.cutout:x+self.cutout],
+                                           sigma=2)
+        #gets a cutout section of the image and applies a gaussian filter
+        #to it, and then proceeds to find the maxima, the filter helps to
+        #remove random spikes and hence solution converges to maxima
+
+        c = ndimage.maximum_position(section)
         X,Y = x,y
         Y  += c[0]-self.cutout
         X  += c[1]-self.cutout
@@ -158,42 +167,62 @@ class Phot:
         aperture  = photutils.CircularAperture(positions, r=radius)
         annulus   = photutils.CircularAnnulus(positions, r_in=radius+6,
                                                          r_out=radius+8)
+        tbl       = photutils.aperture_photometry(self.image,
+                                                  [aperture,annulus],
+                                                  error=self.error)
 
-        phot_tbl  = photutils.aperture_photometry(self.image,
-                                                  aperture, error=self.error)
-        sky_tbl   = photutils.aperture_photometry(self.image,
-                                                  annulus, error=self.error)
-        for col in phot_tbl.colnames:
-            phot_tbl[col].info.format = '%.6g'
-            sky_tbl[col].info.format  = '%.6g'# for consistent table output
+        bg_mean   = tbl['aperture_sum_1'] / annulus.area
+        bg_flx    = bg_mean * aperture.area
+        final_flx = tbl['aperture_sum_0'] - bg_flx
 
+        tbl['res_flx'] = final_flx
+        tbl['flx_err'] = tbl['aperture_sum_err_0']+tbl['aperture_sum_err_1']
 
-        return phot_tbl,sky_tbl
+        for col in tbl.colnames:
+            tbl[col].info.format = '%.6g'
+            # for consistent table output
 
+        self.var  = (tbl['res_flx'][0],tbl['flx_err'][0])
+        self.comp = (tbl['res_flx'][1],tbl['flx_err'][1])
+        self.check= (tbl['res_flx'][2],tbl['flx_err'][2])
 
+        return tbl
+
+    def get_info(self):
+
+        ut=(self.header['UT'])
+#        ra=(self.header['RA'])
+#        dec=(self.header['DEC'])
+        am=(self.header['AIRMASS'])
+        t = Time(self.header['DATE-OBS'], scale='utc')
+        jd=(t.jd)
+
+        return ut,am,jd
 #%%
-
-phot   = Phot(files[0])
-
-phot.img_click()
-
-phot.plot_src(phot.clck)
-
-phot.src_coords = [phot.get_center(c)[0] for c in phot.clck]
-
-phot.plot_src(phot.src_coords)
-
-print(phot.clck)
-print(phot.src_coords)
-
-phot_table,sky_tbl = phot.apphot()
-
-print(phot_table)
+'testing code'
+#phot   = Phot(files[0])
+#
+#phot.img_click()
+#
+#phot.plot_src(phot.clck)
+#
+#phot.src_coords = [phot.get_center(c)[0] for c in phot.clck]
+#
+#phot.plot_src(phot.src_coords)
+#
+#print(phot.clck)
+#print(phot.src_coords)
+#
+#phot_table = phot.apphot()
+#
+#print(phot_table)
 #%%
+'some more testing'
 phot   = Phot(files[0])
 phot.src_coords = [(964, 1090), (408, 726), (835, 328)]
 
-phot_table,sky_tbl = phot.apphot()
+phot_table = phot.apphot()
+
 
 #%%
 #positions = [(964, 1090), (408, 726), (835, 328)]
